@@ -6,29 +6,30 @@ public class MinesweeperGUI extends JFrame {
 
     private Minesweeper game;
     private JButton[][] cellButtons;
+    private boolean[][] revealed;
     private JLabel minesLabel;
     private JLabel timerLabel;
     private JButton resetButton;
     private Timer timer;
+    private JPanel gamePanel;
 
     private int rows = 9;
     private int cols = 9;
     private int mines = 10;
     private int flagsPlaced;
+    private boolean gameFinished;
 
     public MinesweeperGUI() {
-        // Set Windows Look and Feel
         try {
-            UIManager.setLookAndFeel("com.sun.java.swing.plaf.windows.WindowsLookAndFeel");
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception e) {
-            System.out.println("Windows Look and Feel not found, using default.");
+            System.out.println("No se pudo aplicar el Look and Feel del sistema.");
         }
 
         setTitle("Minesweeper");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        // Menu Bar
         JMenuBar menuBar = new JMenuBar();
         JMenu gameMenu = new JMenu("Game");
         JMenuItem newGameItem = new JMenuItem("New");
@@ -44,17 +45,18 @@ public class MinesweeperGUI extends JFrame {
         hardItem.addActionListener(e -> setDifficulty(16, 30, 99));
         customItem.addActionListener(e -> showCustomDialog());
 
-        gameMenu.add(newGameItem);
-        gameMenu.addSeparator();
         difficultyMenu.add(easyItem);
         difficultyMenu.add(mediumItem);
         difficultyMenu.add(hardItem);
         difficultyMenu.add(customItem);
+
+        gameMenu.add(newGameItem);
+        gameMenu.addSeparator();
         gameMenu.add(difficultyMenu);
+
         menuBar.add(gameMenu);
         setJMenuBar(menuBar);
 
-        // Top Panel
         JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createEmptyBorder(5, 5, 5, 5),
@@ -65,12 +67,15 @@ public class MinesweeperGUI extends JFrame {
         minesLabel.setForeground(Color.RED);
         minesLabel.setOpaque(true);
         minesLabel.setBackground(Color.BLACK);
+        minesLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
         timerLabel = new JLabel("000");
         timerLabel.setFont(new Font("Monospaced", Font.BOLD, 20));
         timerLabel.setForeground(Color.RED);
         timerLabel.setOpaque(true);
         timerLabel.setBackground(Color.BLACK);
+        timerLabel.setHorizontalAlignment(SwingConstants.CENTER);
+
         timer = new Timer(1000, e -> updateTimer());
 
         resetButton = new JButton("🙂");
@@ -84,253 +89,198 @@ public class MinesweeperGUI extends JFrame {
 
         add(topPanel, BorderLayout.NORTH);
 
-        // Game Panel
         startGame();
 
-        pack();
-        setLocationRelativeTo(null); // Center the window
+        setLocationRelativeTo(null);
         setVisible(true);
     }
 
     private void startGame() {
-
-        if (getContentPane().getComponentCount() > 1) {
-
-            remove(((BorderLayout) getLayout()).getLayoutComponent(BorderLayout.CENTER));
-
+        if (gamePanel != null) {
+            remove(gamePanel);
         }
 
-        JPanel gamePanel = new JPanel(new GridLayout(rows, cols));
-
+        gamePanel = new JPanel(new GridLayout(rows, cols));
         gamePanel.setBorder(BorderFactory.createLoweredBevelBorder());
 
-        add(gamePanel, BorderLayout.CENTER);
-
         game = new Minesweeper(rows, cols, mines);
-
         game.generateMines();
-
         game.scanAndAssignNumbers();
 
         cellButtons = new JButton[rows][cols];
+        revealed = new boolean[rows][cols];
+        flagsPlaced = 0;
+        gameFinished = false;
 
         for (int i = 0; i < rows; i++) {
-
             for (int j = 0; j < cols; j++) {
-
-                cellButtons[i][j] = new JButton();
-
-                cellButtons[i][j].setFocusable(false);
-
-                cellButtons[i][j].setPreferredSize(new Dimension(25, 25));
+                JButton button = new JButton();
+                button.setPreferredSize(new Dimension(25, 25));
+                button.setFocusable(false);
+                button.setMargin(new Insets(0, 0, 0, 0));
+                button.setText("");
 
                 final int r = i;
-
                 final int c = j;
 
-                cellButtons[i][j].addMouseListener(new MouseAdapter() {
-
+                button.addMouseListener(new MouseAdapter() {
+                    @Override
                     public void mousePressed(MouseEvent e) {
-
-                        if (e.getButton() == MouseEvent.BUTTON1) { // Left click
-
-                            revealCell(r, c);
-
-                        } else if (e.getButton() == MouseEvent.BUTTON3) { // Right click
-
-                            flagCell(r, c);
-
+                        if (gameFinished) {
+                            return;
                         }
 
+                        if (SwingUtilities.isLeftMouseButton(e)) {
+                            revealCell(r, c);
+                        } else if (SwingUtilities.isRightMouseButton(e)) {
+                            flagCell(r, c);
+                        }
                     }
-
                 });
 
-                gamePanel.add(cellButtons[i][j]);
-
+                cellButtons[i][j] = button;
+                gamePanel.add(button);
             }
-
         }
 
-        flagsPlaced = 0;
+        add(gamePanel, BorderLayout.CENTER);
 
         minesLabel.setText(String.format("%03d", mines - flagsPlaced));
-
         timer.stop();
-
         timerLabel.setText("000");
-
         resetButton.setText("🙂");
 
+        revalidate();
+        repaint();
         pack();
-
+        setLocationRelativeTo(null);
     }
 
     private void revealCell(int r, int c) {
-
-        if (!timer.isRunning()) {
-
-            timer.start();
-
+        if (r < 0 || r >= rows || c < 0 || c >= cols) {
+            return;
         }
 
-        if (r < 0 || r >= rows || c < 0 || c >= cols || !cellButtons[r][c].isEnabled()) {
-
+        if (revealed[r][c]) {
             return;
-
         }
 
         JButton cell = cellButtons[r][c];
 
-        cell.setEnabled(false);
+        if ("F".equals(cell.getText())) {
+            return;
+        }
+
+        if (!timer.isRunning()) {
+            timer.start();
+        }
+
+        revealed[r][c] = true;
+
+        cell.setOpaque(true);
+        cell.setBackground(new Color(220, 220, 220));
+        cell.setBorder(BorderFactory.createLoweredBevelBorder());
 
         int value = game.getMinesweeperMatrix()[r][c];
 
         if (value == -1) {
-
-            gameOver(false);
-
             cell.setBackground(Color.RED);
-
             cell.setText("M");
+            gameOver(false);
+            return;
+        }
 
-        } else {
+        cell.setFont(new Font("Monospaced", Font.BOLD, 14));
+        cell.setForeground(getColorForNumber(value));
+        cell.setText(value > 0 ? String.valueOf(value) : "");
 
-            cell.setText(value > 0 ? String.valueOf(value) : "");
-
-            cell.setFont(new Font("Monospaced", Font.BOLD, 14));
-
-            cell.setForeground(getColorForNumber(value));
-
-            if (value == 0) {
-
-                for (int i = -1; i <= 1; i++) {
-
-                    for (int j = -1; j <= 1; j++) {
-
-                        if (i == 0 && j == 0)
-                            continue;
-
-                        revealCell(r + i, c + j);
-
+        if (value == 0) {
+            for (int i = -1; i <= 1; i++) {
+                for (int j = -1; j <= 1; j++) {
+                    if (i == 0 && j == 0) {
+                        continue;
                     }
-
+                    revealCell(r + i, c + j);
                 }
-
             }
-
         }
 
         checkWinCondition();
-
     }
 
     private void flagCell(int r, int c) {
-
-        if (!cellButtons[r][c].isEnabled()) {
-
+        if (revealed[r][c]) {
             return;
-
         }
 
-        if (cellButtons[r][c].getText().equals("F")) {
+        JButton cell = cellButtons[r][c];
 
-            cellButtons[r][c].setText("");
-
+        if ("F".equals(cell.getText())) {
+            cell.setText("");
             flagsPlaced--;
-
         } else {
-
-            cellButtons[r][c].setText("F");
-
+            cell.setText("F");
             flagsPlaced++;
-
         }
 
         minesLabel.setText(String.format("%03d", mines - flagsPlaced));
-
     }
 
     private Color getColorForNumber(int number) {
-
         switch (number) {
-
             case 1:
                 return Color.BLUE;
-
             case 2:
-                return new Color(0, 128, 0); // Green
-
+                return new Color(0, 128, 0);
             case 3:
                 return Color.RED;
-
             case 4:
-                return new Color(0, 0, 128); // Dark Blue
-
+                return new Color(0, 0, 128);
             case 5:
-                return new Color(128, 0, 0); // Dark Red
-
+                return new Color(128, 0, 0);
             case 6:
-                return new Color(0, 128, 128); // Teal
-
+                return new Color(0, 128, 128);
             case 7:
                 return Color.BLACK;
-
             case 8:
                 return Color.GRAY;
-
             default:
                 return Color.BLACK;
-
         }
-
     }
 
     private void gameOver(boolean win) {
-
+        gameFinished = true;
         timer.stop();
 
         for (int i = 0; i < rows; i++) {
-
             for (int j = 0; j < cols; j++) {
-
-                cellButtons[i][j].setEnabled(false);
-
                 if (game.getMinesweeperMatrix()[i][j] == -1) {
-
                     cellButtons[i][j].setText("M");
-
                 }
-
             }
-
         }
 
         if (win) {
-
             resetButton.setText("😎");
-
             JOptionPane.showMessageDialog(this, "You win!", "Congratulations", JOptionPane.INFORMATION_MESSAGE);
-
         } else {
-
             resetButton.setText("😵");
-
             JOptionPane.showMessageDialog(this, "Game Over!", "Boom!", JOptionPane.ERROR_MESSAGE);
-
         }
-
     }
 
     private void checkWinCondition() {
         int revealedCount = 0;
+
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
-                if (!cellButtons[i][j].isEnabled()) {
+                if (revealed[i][j]) {
                     revealedCount++;
                 }
             }
         }
+
         if (revealedCount == (rows * cols) - game.getMines()) {
             gameOver(true);
         }
@@ -359,14 +309,35 @@ public class MinesweeperGUI extends JFrame {
         };
 
         int option = JOptionPane.showConfirmDialog(this, message, "Custom Difficulty", JOptionPane.OK_CANCEL_OPTION);
+
         if (option == JOptionPane.OK_OPTION) {
             try {
                 int r = Integer.parseInt(rowsField.getText());
                 int c = Integer.parseInt(colsField.getText());
                 int m = Integer.parseInt(minesField.getText());
+
+                if (r <= 0 || c <= 0) {
+                    JOptionPane.showMessageDialog(this,
+                            "Rows and columns must be greater than zero.",
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                if (m <= 0 || m >= (r * c)) {
+                    JOptionPane.showMessageDialog(this,
+                            "The number of mines must be greater than 0 and less than the number of cells.",
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
                 setDifficulty(r, c, m);
+
             } catch (NumberFormatException e) {
-                JOptionPane.showMessageDialog(this, "Invalid input. Please enter numbers only.", "Error",
+                JOptionPane.showMessageDialog(this,
+                        "Invalid input. Please enter numbers only.",
+                        "Error",
                         JOptionPane.ERROR_MESSAGE);
             }
         }
@@ -374,7 +345,9 @@ public class MinesweeperGUI extends JFrame {
 
     private void updateTimer() {
         int currentTime = Integer.parseInt(timerLabel.getText());
-        currentTime++;
+        if (currentTime < 999) {
+            currentTime++;
+        }
         timerLabel.setText(String.format("%03d", currentTime));
     }
 
